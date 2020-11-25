@@ -1,0 +1,455 @@
+//May ap trung ga( trung vit cung ok)
+
+//|------------------------------------------------------------------------------------------------------|//
+//|******************************************************************************************************|//
+//|*                                            May ap trung                                            *|//
+//|*                                         Nguyen Ngoc Gia Huy                                        *|//
+//|*                                  Version: Con du gi thi lam thu do                                 *|//
+//|*                                        19 Thang 10 Nam 2020                                        *|//
+//|******************************************************************************************************|//
+//|------------------------------------------------------------------------------------------------------|//
+
+
+
+
+
+
+
+#include <EEPROM.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+// Set DHT pin:
+#define DHTPIN 4
+// Set DHT type, uncomment whatever type you're using!
+#define DHTTYPE DHT11   // DHT 11 
+
+// Initialize DHT sensor for normal 16mhz Arduino:
+DHT dht = DHT(DHTPIN, DHTTYPE);
+
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+
+#define RELAY_LIGHT      5
+#define RELAY_FAN        6
+#define PUSH_BUTTON_1    7
+#define PUSH_BUTTON_2    8
+#define PUSH_BUTTON_3    9
+
+
+#include <SoftwareSerial.h>
+int rxPin = 2;
+int txPin = 3;
+SoftwareSerial hc06(rxPin, txPin);
+
+#include <HCRTC.h>
+#define I2CDS1307Add 0x68
+#define I2C24C32Add  0x50
+HCRTC HCRTC;
+
+unsigned long second;
+int SPEAKER = 12;    // The speaker is on pin 12
+String message;
+int x = 0, hourset, minuteset, dayset, monthset, yearset;
+char ch;
+String str;
+float temp , humid , tempset, humidset;
+bool save = 0;// heat 1 - nong hon, heat 0 - lanh hon, dry 1 - kho hon, dry 0 - am uot hon, save 0 - chua luu thong tin, save 1 - luu thong tin khi bam mode
+
+
+//------------------------------------------//
+
+byte Logosetting[] = {
+  B01100,
+  B01100,
+  B00000,
+  B01100,
+  B01100,
+  B00000,
+  B01100,
+  B01100
+};
+
+byte Logosettingg[] = {
+  B11111,
+  B11111,
+  B00000,
+  B11111,
+  B11111,
+  B00000,
+  B11111,
+  B11111
+};
+
+byte Arrowright[] = {
+  B11000,
+  B01100,
+  B00110,
+  B00011,
+  B00011,
+  B00110,
+  B01100,
+  B11000
+};
+
+byte Arrowleft[] = {
+  B00011,
+  B00110,
+  B01100,
+  B11000,
+  B11000,
+  B01100,
+  B00110,
+  B00011
+};
+
+byte Light[] = {
+  B00000,
+  B01110,
+  B10001,
+  B11011,
+  B10101,
+  B01110,
+  B01110,
+  B00100
+};
+
+byte Nhietke[] = {
+  B00100,
+  B01110,
+  B01110,
+  B01110,
+  B10101,
+  B10101,
+  B01110,
+  B00000
+};
+
+
+
+byte Water[] = {
+  B00000,
+  B00100,
+  B01010,
+  B11101,
+  B11101,
+  B11101,
+  B01110,
+  B00000
+};
+
+
+
+byte Clock[] = {
+  B11111,
+  B11111,
+  B01110,
+  B00100,
+  B00100,
+  B01010,
+  B10001,
+  B11111
+};
+
+byte Te[] = {
+  B00111,
+  B00101,
+  B00111,
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B00000
+};
+
+
+
+
+
+//----------------------------------------//
+int coutDay(int d, int m, int y){
+  int t;
+  if(HCRTC.GetYear()==y){
+    if(HCRTC.GetMonth()==m){
+      t=HCRTC.GetDay()-d;
+      return t;
+    }
+    else{
+      t=(30-d)+HCRTC.GetDay();
+      return t;
+    }
+  }else{
+    t=((12-m)*30-d)+((HCRTC.GetMonth()-1)*30+HCRTC.GetDay());
+    return t;
+  }
+}
+void setup()
+{
+  //----------------------------------------// 
+  pinMode(RELAY_LIGHT, OUTPUT);
+  pinMode(RELAY_FAN, OUTPUT);
+  pinMode(PUSH_BUTTON_1, INPUT_PULLUP);
+  pinMode(PUSH_BUTTON_2, INPUT_PULLUP);
+  pinMode(PUSH_BUTTON_3, INPUT_PULLUP);
+  pinMode(SPEAKER, OUTPUT);
+  //---------------------------------------//
+  Serial.begin(9600);
+  dht.begin();
+  hc06.begin(9600); // đặt baudrate giao tiếp hc06
+
+  //--------------------------------------------//
+  lcd.init();
+  lcd.backlight();
+  lcd.createChar(0, Logosetting);
+  lcd.createChar(1, Logosettingg);
+  lcd.createChar(2, Arrowright);
+  lcd.createChar(3, Arrowleft);
+  lcd.createChar(4, Light);
+  lcd.createChar(5, Nhietke);
+  lcd.createChar(6, Water);
+  lcd.createChar(7, Clock);
+  lcd.createChar(8, Te);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("  May ap trung  ");
+  lcd.setCursor(0, 1);
+  lcd.print("     Gia Huy    ");
+  delay(1000);
+  /*
+  lcd.clear();
+  lcd.setCursor(7, 1);
+  lcd.write(0);
+  lcd.setCursor(8, 1);
+  lcd.write(1);
+  lcd.setCursor(14, 1);
+  lcd.write(2);
+  lcd.setCursor(1, 1);
+  lcd.write(3);
+  lcd.setCursor(0, 0);
+  lcd.print("Tang");
+  lcd.setCursor(12, 0);
+  lcd.print("Giam");
+  lcd.setCursor(6, 0);
+  lcd.print("Mode");
+  delay(800);
+  */
+  lcd.clear();
+  //-------------------------------------------//
+  digitalWrite(RELAY_LIGHT, HIGH);
+  digitalWrite(RELAY_FAN, HIGH);
+  //----------Nap 1 lan, nap xong dat vao comment ---------------------------//
+ /*
+  EEPROM.write(200,37.5);   // Gia tri nhiet do co dinh
+  EEPROM.write(201,70);     // Gia tri do am co dinh
+  EEPROM.write(202,26);  // Ngay
+  EEPROM.write(203,10); //Thang
+  EEPROM.write(204,20); //Nam1
+
+ */
+  //-------------------------------------//
+  
+  //------------------------------------//
+  delay(200);
+
+}
+void loop() {
+  tempset = EEPROM.read(200);   // Gia tri nhiet do co dinh
+  humidset = EEPROM.read(201);     // Gia tri do am co dinh
+  dayset = EEPROM.read(202);  // Ngay
+  monthset = EEPROM.read(203);
+  yearset = EEPROM.read(204)+2000;
+  HCRTC.EEStartRead(I2C24C32Add, 32000);
+   HCRTC.RTCRead(I2CDS1307Add);
+
+  humid = dht.readHumidity();
+  if(humid > humidset){
+    digitalWrite(RELAY_FAN, LOW);
+  }
+  else{
+    digitalWrite(RELAY_FAN, HIGH);
+  }
+  temp = dht.readTemperature();
+  if(temp<tempset){
+    digitalWrite(RELAY_LIGHT, LOW);
+  }else{
+    digitalWrite(RELAY_LIGHT, HIGH);
+  }
+  if(HCRTC.GetSecond()%5==0){
+    hc06.print(temp);
+    hc06.println("°C");
+    hc06.print(humid);
+    hc06.println("%");
+    hc06.print("So ngay ap: ");
+    hc06.println(coutDay(dayset,monthset,yearset-2000)+1);
+    hc06.println("-----------");
+    delay(800);
+  }
+  if (x == 0) {
+    
+    lcd.setCursor(0, 0);
+    lcd.print(temp);
+    lcd.setCursor(5, 0);
+    lcd.write(8);
+    lcd.setCursor(6, 0);
+    lcd.print("C");
+  
+    lcd.setCursor(10, 0);
+    lcd.print(humid);
+    lcd.setCursor(15, 0);
+    lcd.print("%");
+
+    lcd.setCursor(0,1);
+    lcd.print("So ngay ap: ");
+    lcd.setCursor(12, 1);
+    lcd.print(coutDay(dayset,monthset,yearset-2000)+1);
+    
+    
+  }
+
+  if (digitalRead(PUSH_BUTTON_2) == LOW && x == 0) {
+    x += 1;
+    tone(SPEAKER, 3500);
+    delay(300);
+    noTone(SPEAKER);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("1 - Set nhiet do");
+    lcd.setCursor(0, 1);
+    lcd.write(5);
+    lcd.setCursor(1, 1);
+    lcd.print(":");
+    lcd.setCursor(3, 1);
+    lcd.print(tempset);
+    while (x == 1 && digitalRead(PUSH_BUTTON_2) == HIGH) {
+      if (digitalRead(PUSH_BUTTON_3) == LOW) {
+        delay(160);
+        tempset += 0.1;
+        lcd.setCursor(3, 1);
+        lcd.print(tempset);
+        save = 1;
+      }
+      if (digitalRead(PUSH_BUTTON_1) == LOW) {
+        delay(160);
+        tempset -= 0.1;
+        lcd.setCursor(3, 1);
+        lcd.print(tempset);
+        save = 1;
+      }
+    }
+  }
+  if (digitalRead(PUSH_BUTTON_2) == LOW && x == 1) {
+    if (save == 1) {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Luu thanh cong");
+      
+      EEPROM.write(200, tempset);   // Nap gia tri nhiet do co dinh
+      save = 0;
+      delay(800);
+    }
+    x += 1;
+    tone(SPEAKER, 3500);
+    delay(300);
+    noTone(SPEAKER);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("2 - Set do am");
+    lcd.setCursor(0, 1);
+    lcd.write(6);
+    lcd.setCursor(1, 1);
+    lcd.print(":");
+    lcd.setCursor(3, 1);
+    lcd.print(humidset);
+    while (x == 2 && digitalRead(PUSH_BUTTON_2) == HIGH) {
+      if (digitalRead(PUSH_BUTTON_3) == LOW) {
+        delay(160);
+        humidset += 0.1;
+        lcd.setCursor(3, 1);
+        lcd.print(humidset);
+        save = 1;
+      }
+      if (digitalRead(PUSH_BUTTON_1) == LOW) {
+        delay(160);
+        humidset -= 0.1;
+        lcd.setCursor(3, 1);
+        lcd.print(humidset);
+        save = 1;
+      }
+    }
+  }
+  if (digitalRead(PUSH_BUTTON_2) == LOW && x == 2) {
+    if (save == 1) {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Luu thanh cong");
+      
+      EEPROM.write(201, humidset);   // Nap gia tri do am co dinh
+      save = 0;
+      delay(800);
+    }
+    x += 1;
+    tone(SPEAKER, 3500);
+    delay(300);
+    noTone(SPEAKER);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("3 - Ngay bat dau");
+    lcd.setCursor(3, 1);
+    lcd.print(dayset);
+    lcd.setCursor(5, 1);
+    lcd.print("/");
+    lcd.setCursor(6, 1);
+    lcd.print(monthset);
+    lcd.setCursor(8, 1);
+    lcd.print("/");
+    lcd.setCursor(9, 1);
+    lcd.print(yearset);
+    while (x == 3 && digitalRead(PUSH_BUTTON_2) == HIGH) {
+      if (digitalRead(PUSH_BUTTON_3) == LOW&&digitalRead(PUSH_BUTTON_1) == LOW) {
+        delay(160);
+        second=millis();
+        while(digitalRead(PUSH_BUTTON_3) == LOW&&digitalRead(PUSH_BUTTON_1) == LOW){
+        
+     
+          if(millis()-second>3000){
+          tone(SPEAKER, 3500);
+          delay(300);
+          noTone(SPEAKER);
+          save = 1;
+          break;
+          }
+        }
+      }
+    }
+    
+  }
+  if (digitalRead(PUSH_BUTTON_2) == LOW && x == 3) {
+    if (save == 1) {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Luu thanh cong");     
+      EEPROM.write(202,HCRTC.GetDay());  // Ngay
+      EEPROM.write(203,HCRTC.GetMonth()); //Thang
+      EEPROM.write(204,HCRTC.GetYear()); //Nam1
+      
+      save = 0;
+      delay(800);
+    }
+    x -= 3;
+    tone(SPEAKER, 3500);
+    delay(300);
+    noTone(SPEAKER);
+    lcd.clear();
+  }
+
+
+
+
+
+
+
+
+
+}
